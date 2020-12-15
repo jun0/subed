@@ -59,6 +59,7 @@
     (define-key subed-mode-map (kbd "M-m") #'subed-merge-with-next)
     (define-key subed-mode-map (kbd "M-M") #'subed-merge-with-previous)
     (define-key subed-mode-map (kbd "M-s") #'subed-sort)
+    (define-key subed-mode-map (kbd "M-.") #'subed-split-subtitle)
     (define-key subed-mode-map (kbd "M-SPC") #'subed-mpv-toggle-pause)
     (define-key subed-mode-map (kbd "C-c C-d") #'subed-toggle-debugging)
     (define-key subed-mode-map (kbd "C-c C-v") #'subed-mpv-find-video)
@@ -101,6 +102,7 @@
         "forward-subtitle-time-stop" "backward-subtitle-time-stop"
         "set-subtitle-time-start" "set-subtitle-time-stop"
         "prepend-subtitle" "append-subtitle" "kill-subtitle" "merge-with-next"
+        "split-subtitle"
         "regenerate-ids" "regenerate-ids-soon"
         "sanitize" "validate" "sort" "trans-init" "trans-cleanup"))
 

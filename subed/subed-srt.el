@@ -441,6 +441,77 @@ Update the end timestamp accordingly."
             (subed-srt--regenerate-ids-soon))
         (error "No subtitle to merge into")))))
 
+(defcustom subed-srt--split-time-function 'subed-srt--interpolate-time
+  "Name of function to use for computing the new start and end
+times when a subtitle is split with `subed-srt--split-subtitle'.
+See `subed-srt--interpolate-time' for its interface.")
+
+(defun subed-srt--interpolate-time (start-time stop-time pre-text post-text)
+  "Return (NEW-STOP . NEW-START) where NEW-STOP estimates the
+time at which the video should finish displaying PRE-TEXT and
+NEW-START estimates the time at which the video should start
+displaying POST-TEXT, assuming that it currently displays (concat
+PRE-TEXT \" \" POST-TEXT) from START-TIME to STOP-TIME.  All
+times are measured in milliseconds.
+
+If START-TIME and STOP-TIME are at least `subed-subtitle-spacing'
+apart, leave that much gap between NEW-STOP and NEW-START.
+Otherwise, the gap will be 0 seconds.
+
+This function just interpolates linearly based on the number of
+characters."
+  (let ((pre-len (length pre-text))
+        (post-len (length post-text))
+        (gap-len (if (>= (- stop-time start-time) subed-subtitle-spacing)
+                     subed-subtitle-spacing
+                   0)))
+    ;; Calculation.  Let
+    ;; l := start-time, r := stop-time, g := gap-len
+    ;; L := new-stop   R := new-start,  x = pre-len,  y = post-len
+    ;; We want the new subtitle lengths to be weighted as
+    ;;   (L-l) : (r-R) = x : y
+    ;; so
+    ;;   R-L = g
+    ;;   (L-l) y = (r-R) x
+    ;; Solving that by a CAS gives
+    ;;   L = ((r - g) x + l y)/(x + y)
+    ;;   R = L + g
+    (let ((L (/ (+ (* (- stop-time gap-len) pre-len) (* start-time post-len))
+                (+ pre-len post-len))))
+      (cons L (+ L gap-len)))))
+
+(defun subed-srt--split-subtitle ()
+  "Split subtitle into two at point.  The end time of the first
+half and the start time of the second half will be guessed by
+`subed-srt--split-time-function'.  You should fine-tune the
+result with recutting commands."
+  (interactive)
+  (let ((text-beg (save-excursion (subed-srt--jump-to-subtitle-text)))
+        (text-end (save-excursion (subed-srt--jump-to-subtitle-end)))
+        (orig-start-time (subed-srt--subtitle-msecs-start))
+        (orig-stop-time  (subed-srt--subtitle-msecs-stop))
+        split-time pre-text post-text)
+    (unless (and (<= text-beg (point)) (< (point) text-end))
+      (error "Not inside subtitle text."))
+    (when (looking-back "[ \t]+" text-beg)
+      (backward-char (length (match-string 0))))
+    (setq pre-text (buffer-substring text-beg (point)))
+    (setq post-text (replace-regexp-in-string
+                     "^[ \t]*" ""
+                     (buffer-substring (point) text-end)))
+    (setq split-time
+          (funcall subed-srt--split-time-function
+                   orig-start-time
+                   orig-stop-time
+                   pre-text post-text))
+    (delete-region (point) text-end)
+    (subed-srt--set-subtitle-time-stop (car split-time))
+    (subed-srt--append-subtitle (1+ (subed-srt--subtitle-id))
+                                (cdr split-time)
+                                orig-stop-time
+                                post-text)
+    (subed-srt--regenerate-ids-soon)))
+
 ;;; Maintenance
 
 (defun subed-srt--regenerate-ids ()
