@@ -41,6 +41,10 @@
    '("^.*$" . 'subed-srt-text-face))
   "Highlighting expressions for `subed-mode'.")
 
+(defconst subed-srt-trans-font-lock-keywords
+  (append (list
+           '("^#+\\.*$" . 'subed-srt-trans-fence-face))
+          subed-srt-font-lock-keywords))
 
 ;;; Parsing
 
@@ -589,6 +593,74 @@ scheduled call is canceled and another call is scheduled in
                                         (mapconcat 'identity '("^-"
                                                                "[[:graph:]]*$") "\\|")
                                         "\\)"))))
+
+;; Translation mode
+
+(defvar-local subed-srt--trans-overlays nil
+  "Overlays tracked in subed-trans-mode for SRT files.")
+
+(defun subed-srt--trans-format-fence (duration)
+  (let* ((num-slow-chars (max 1 (floor (* subed-trans-slow-speed
+                                          (/ duration 1000.0)))))
+         (num-fast-chars (max 0 (- (floor (* subed-trans-fast-speed
+                                             (/ duration 1000.0)))
+                                   num-slow-chars))))
+    (concat (make-string num-slow-chars ?#)
+            (make-string num-fast-chars ?.)
+            "\n")))
+
+(defun subed-srt--trans-get-overlay (&optional pos)
+  "Make or get an overlay for the subtitle at POS (or point if
+nil)."
+  (cl-block esc
+    (let ((start (subed-srt--jump-to-subtitle-time-start))
+          (end   (prog2 (next-line) (point))))
+      (cl-loop
+       for ov being overlays from start to end
+       if (overlay-get ov 'subed-srt) do (cl-return-from esc ov))
+      (let ((ov (make-overlay start end nil nil t)))
+        (overlay-put ov 'subed-srt t)
+        (add-to-list 'subed-srt--trans-overlays ov)
+        ov))))
+
+(defun subed-srt--trans-regenerate-fences (beg end previous-len)
+  "Make sure fences correspond to subtitle lengths.  This
+function is meant to be an item in `after-change-functions' and
+therefore gets PREVIOUS-LEN, which is ignored."
+  (subed-srt--validate)
+  (atomic-change-group
+    (save-match-data
+      (save-excursion
+        (goto-char beg)
+        (cl-do ((pos (subed-srt--jump-to-subtitle-time-start)
+                     (subed-srt--forward-subtitle-time-start))
+                (start-time (subed-srt--subtitle-msecs-start)
+                            (subed-srt--subtitle-msecs-start))
+                (stop-time (subed-srt--subtitle-msecs-stop)
+                           (subed-srt--subtitle-msecs-stop)))
+            ((or (not pos) (> pos end)))
+          (when (and start-time stop-time) ; make sure subtitle headers parse
+            (let ((duration (- stop-time start-time))
+                  (ov (subed-srt--trans-get-overlay)))
+              (unless (equal duration (overlay-get ov 'duration))
+                (overlay-put ov 'duration duration)
+                (overlay-put ov 'after-string
+                             (subed-srt--trans-format-fence duration))))))))))
+
+(defun subed-srt--trans-init ()
+  "This function is called when subed-trans-mode is enabled for an SRT file."
+  (subed-srt--validate)
+  (subed-srt--trans-regenerate-fences (point-min) (point-max) nil)
+  (setq-local font-lock-defaults '(subed-srt-trans-font-lock-keywords))
+  (add-hook 'after-change-functions 'subed-srt--trans-regenerate-fences t t))
+
+(defun subed-srt--trans-cleanup ()
+  "This function is called when subed-trans-mode is disabled for an SRT file."
+  (setq-local font-lock-defaults '(subed-srt-font-lock-keywords))
+  (cl-loop for ov in subed-srt--trans-overlays
+           do (delete-overlay ov))
+  (setq subed-srt--trans-overlays nil)
+  (remove-hook 'after-change-functions 'subed-srt--trans-regenerate-fences))
 
 (provide 'subed-srt)
 ;;; subed-srt.el ends here

@@ -77,6 +77,14 @@
   '((t (:inherit 'default)))
   "Text of the subtitle")
 
+(defface subed-srt-trans-fence-face
+  '((t (:inherit 'font-lock-prompt-face)))
+  "Fence separating original+comments and translation")
+
+(defface subed-srt-trans-comment-face
+  '((t (:inherit 'font-lock-comment-face)))
+  "Comment in translation mode")
+
 ;; Variables
 
 (defvar-local subed-debugging-enabled-p nil
@@ -214,6 +222,15 @@ hardcoded."
   "Return base name of buffer file name or a default name."
   (file-name-nondirectory (or (buffer-file-name) "unnamed")))
 
+(defcustom subed-trans-slow-speed 8
+  "Number of translated characters you expect a slow reader to
+process in 1 second."
+  :type 'float)
+
+(defcustom subed-trans-fast-speed 12
+  "Number of translated characters you expect a fast reader to
+process in 1 second."
+  :type 'float)
 
 ;; Hooks
 
