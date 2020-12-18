@@ -299,6 +299,76 @@ See `subed-increase-start-time' about ARG."
     (subed--run-subtitle-time-adjusted-hook)
     subed-mpv-playback-position))
 
+;;; Recutting
+;;; (adjusting stop and start time of adjacent subtitles by the same amount)
+
+(defun subed-recut-subtitle (msecs &optional
+                                   ignore-negative-duration
+                                   ignore-overlap)
+  "Add MSECS milliseconds to stop time of current subtitle and
+start time of next subtitle (use negative value to subtract).
+
+Ignores `subed-subtitle-spacing' and preserves the gap between
+the subtitles in question."
+  (save-excursion
+    ;; First make sure we're not at the last subtitle.
+    ;; subed-srt--forward-subtitle seems to count the blank line
+    ;; between subtitles as belonging to the next subtitle whereas
+    ;; subed-srt--jump-to-subtitle-id counts it as part of the
+    ;; preceding subtitle.  We want the latter behavior, so we start
+    ;; with a jump to somewhere that's unambiguous.
+    (subed-jump-to-subtitle-id)
+    (let ((pos (point))
+          amount)
+      (unless (subed-forward-subtitle-id)
+        (error "no more subtitles below"))
+      ;; Process the subtitle that gets shorter first, and use the
+      ;; amount it actually shrank by to adjust the other subtitle.
+      (if (>= msecs 0)
+          (progn
+            (setq amount
+                  (subed-adjust-subtitle-time-start msecs
+                                                    ignore-negative-duration
+                                                    ignore-overlap))
+            (goto-char pos)
+            (subed-adjust-subtitle-time-stop amount
+                                             ignore-negative-duration
+                                             t))
+        (goto-char pos)
+        (setq amount
+              (subed-adjust-subtitle-time-stop msecs
+                                               ignore-negative-duration
+                                               ignore-overlap))
+        (subed-forward-subtitle-id)
+        (subed-adjust-subtitle-time-start amount
+                                          ignore-negative-duration
+                                          t))))
+  (subed--replay-adjusted-subtitle
+   (max (subed-subtitle-msecs-start)
+        (- (subed-subtitle-msecs-stop)
+           subed-loop-seconds-before))))
+
+(defun subed-recut-next-subtitle-forward (&optional arg)
+  "Move the gap between the current and next subtitles
+`subed-milliseconds-adjust' forward.
+
+Recuts are like adjustments but move the adjacent stop/start
+times by the same amount, preserving gap duration.
+See `subed-move-subtitle-forward' about ARG."
+  (interactive "P")
+  (let ((msecs (subed-get-milliseconds-adjust arg)))
+    (subed-recut-subtitle msecs)))
+
+(defun subed-recut-next-subtitle-backward (&optional arg)
+  "Move the gap between the current and next subtitles
+`subed-milliseconds-adjust' backward.
+
+Recuts are like adjustments but move the adjacent stop/start
+times by the same amount, preserving gap duration.
+See `subed-move-subtitle-forward' about ARG."
+  (interactive "P")
+  (let ((msecs (subed-get-milliseconds-adjust arg)))
+    (subed-recut-subtitle (- msecs))))
 
 ;;; Moving subtitles
 ;;; (adjusting start and stop time by the same amount)

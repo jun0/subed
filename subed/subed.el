@@ -49,6 +49,8 @@
     (define-key subed-mode-map (kbd "M-]") #'subed-increase-start-time)
     (define-key subed-mode-map (kbd "M-{") #'subed-decrease-stop-time)
     (define-key subed-mode-map (kbd "M-}") #'subed-increase-stop-time)
+    (define-key subed-mode-map (kbd "M-(") #'subed-recut-next-subtitle-backward)
+    (define-key subed-mode-map (kbd "M-)") #'subed-recut-next-subtitle-forward)
     (define-key subed-mode-map (kbd "C-M-n") #'subed-move-subtitle-forward)
     (define-key subed-mode-map (kbd "C-M-p") #'subed-move-subtitle-backward)
     (define-key subed-mode-map (kbd "C-M-f") #'subed-shift-subtitle-forward)
@@ -165,6 +167,9 @@ Adjust - Increase or decrease start or stop time of a subtitle
          by the same amount
  Shift - Increase or decrease start and stop time of the current
          and all following subtitles by the same amount
+ Recut - Increase or decrease a subtitle's stop time and the
+         immediately following subtitle's start time by the same
+         amount
 
 Key bindings:
 \\{subed-mode-map}"
