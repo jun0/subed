@@ -456,6 +456,298 @@ Baz.
       (expect (buffer-string) :to-equal "foo")))
   )
 
+(describe "Gap motion"
+  :var (subed-subtitle-time-adjusted-hook)
+  (it "runs the appropriate hook."
+    (let ((foo (setf (symbol-function 'foo) (lambda (gap-beg gap-end) ()))))
+      (spy-on 'foo)
+      (with-temp-srt-buffer
+        (add-hook 'subed-gap-time-adjusted-hook 'foo)
+        (insert mock-srt-data)
+        (subed-jump-to-subtitle-id 1)
+        (expect (subed-move-gap-after-subtitle 100) :to-equal 100)
+        (expect 'foo :to-have-been-called-with 65223 122334)
+        (expect 'foo :to-have-been-called-times 1)
+        (expect (subed-move-gap-after-subtitle -200) :to-equal -200)
+        (expect 'foo :to-have-been-called-with 65023 122134)
+        (expect 'foo :to-have-been-called-times 2)
+        (subed-jump-to-subtitle-id 2)
+        (expect (subed-move-gap-after-subtitle 655) :to-equal 655)
+        (expect 'foo :to-have-been-called-with 131000 184105)
+        (expect 'foo :to-have-been-called-times 3)
+        (subed-jump-to-subtitle-id 3)
+        (expect (subed-move-gap-after-subtitle 123) :to-throw
+                'error '("No gap here to move"))
+        (expect 'foo :to-have-been-called-times 3))))
+  (it "moves the gap boundaries."
+    (with-temp-srt-buffer
+      (insert mock-srt-data)
+      (subed-jump-to-subtitle-id 1)
+      (expect (subed-move-gap-after-subtitle 100) :to-equal 100)
+      (expect (save-excursion (subed-jump-to-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:01:01,000 --> 00:01:05,223\n")
+      (expect (save-excursion (subed-forward-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:02:02,334 --> 00:02:10,345\n")
+      (expect (subed-move-gap-after-subtitle -200) :to-equal -200)
+      (expect (save-excursion (subed-jump-to-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:01:01,000 --> 00:01:05,023\n")
+      (expect (save-excursion (subed-forward-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:02:02,134 --> 00:02:10,345\n")
+      (subed-jump-to-subtitle-id 2)
+      (expect (subed-move-gap-after-subtitle 655) :to-equal 655)
+      (expect (save-excursion (subed-jump-to-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:02:02,134 --> 00:02:11,000\n")
+      (expect (save-excursion (subed-forward-subtitle-time-start)
+                              (thing-at-point 'line)) :to-equal "00:03:04,105 --> 00:03:15,5\n")))
+  (it "correctly identifies the gap when point is right on it"
+    (with-temp-srt-buffer
+      (insert mock-srt-data)
+      (subed-jump-to-subtitle-id 2)
+      (backward-char 1)
+      (expect (subed-move-gap-after-subtitle 100) :to-equal 100)
+      (expect (save-excursion (subed-jump-to-subtitle-time-start 1)
+                              (thing-at-point 'line)) :to-equal "00:01:01,000 --> 00:01:05,223\n")
+      (expect (save-excursion (subed-jump-to-subtitle-time-start 2)
+                              (thing-at-point 'line)) :to-equal "00:02:02,334 --> 00:02:10,345\n"))
+    )
+  (describe "enforces boundaries"
+    (describe "when moving backward"
+      (it "the first gap."
+        (with-temp-srt-buffer
+          (insert (concat "1\n"
+                          "00:00:01,000 --> 00:00:02,000\n"
+                          "Foo.\n\n"
+                          "2\n"
+                          "00:00:02,200 --> 00:00:03,000\n"
+                          "Bar.\n"))
+          (subed-jump-to-subtitle-id 1)
+          (expect (subed-move-gap-after-subtitle -999) :to-be -999)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(1001 . 1201))
+          (expect (subed-move-gap-after-subtitle -1) :to-be -1)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(1000 . 1200))
+          (expect (subed-move-gap-after-subtitle 0) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(1000 . 1200))
+          (expect (subed-move-gap-after-subtitle -1) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(1000 . 1200))))
+      (it "a non-first gap."
+        (with-temp-srt-buffer
+          (insert (concat "1\n"
+                          "00:00:01,000 --> 00:00:02,000\n"
+                          "Foo.\n\n"
+                          "2\n"
+                          "00:00:03,000 --> 00:00:04,000\n"
+                          "Bar.\n\n"
+                          "3\n"
+                          "00:00:05,000 --> 00:00:06,000\n"
+                          "Baz.\n\n"))
+          (subed-jump-to-subtitle-id 2)
+          (expect (subed-move-gap-after-subtitle -999) :to-be -999)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(3001 . 4001))
+          (expect (subed-move-gap-after-subtitle -1) :to-be -1)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(3000 . 4000))
+          (expect (subed-move-gap-after-subtitle 0) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(3000 . 4000))
+          (expect (subed-move-gap-after-subtitle -1) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(3000 . 4000)))))
+    (describe "when moving forward"
+      (it "the first gap."
+        (with-temp-srt-buffer
+          (insert (concat "1\n"
+                          "00:00:01,000 --> 00:00:02,000\n"
+                          "Foo.\n\n"
+                          "2\n"
+                          "00:00:02,200 --> 00:00:03,000\n"
+                          "Bar.\n"))
+          (subed-jump-to-subtitle-id 1)
+          (expect (subed-move-gap-after-subtitle 799) :to-be 799)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(2799 . 2999))
+          (expect (subed-move-gap-after-subtitle 1) :to-be 1)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(2800 . 3000))
+          (expect (subed-move-gap-after-subtitle 0) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(2800 . 3000))
+          (expect (subed-move-gap-after-subtitle 1) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 2))
+                  :to-equal '(2800 . 3000))))
+      (it "a non-first gap."
+        (with-temp-srt-buffer
+          (insert (concat "1\n"
+                          "00:00:01,000 --> 00:00:02,000\n"
+                          "Foo.\n\n"
+                          "2\n"
+                          "00:00:03,000 --> 00:00:04,000\n"
+                          "Bar.\n\n"
+                          "3\n"
+                          "00:00:05,000 --> 00:00:06,000\n"
+                          "Baz.\n\n"))
+          (subed-jump-to-subtitle-id 2)
+          (expect (subed-move-gap-after-subtitle 999) :to-be 999)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(4999 . 5999))
+          (expect (subed-move-gap-after-subtitle 1) :to-be 1)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(5000 . 6000))
+          (expect (subed-move-gap-after-subtitle 0) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(5000 . 6000))
+          (expect (subed-move-gap-after-subtitle 1) :to-be nil)
+          (expect (cons (subed-subtitle-msecs-stop)
+                        (subed-subtitle-msecs-start 3))
+                  :to-equal '(5000 . 6000)))))
+    )
+  (describe "ignores negative duration if the second argument is truthy"
+    (it "when moving the gap forward."
+      (with-temp-srt-buffer
+        (insert (concat "1\n"
+                        "00:00:01,000 --> 00:00:02,000\n"
+                        "Foo.\n\n"
+                        "2\n"
+                        "00:00:03,000 --> 00:00:04,000\n"
+                        "Bar.\n"))
+        (subed-jump-to-subtitle-id 1)
+        (expect (subed-move-gap-after-subtitle 2000 t) :to-be 2000)
+        (expect (list (subed-subtitle-msecs-stop)
+                      (subed-subtitle-msecs-start 2)
+                      (subed-subtitle-msecs-stop 2))
+                :to-equal '(4000 5000 4000))
+        (expect (subed-move-gap-after-subtitle 1000 t) :to-be 1000)
+        (expect (list (subed-subtitle-msecs-stop)
+                      (subed-subtitle-msecs-start 2)
+                      (subed-subtitle-msecs-stop 2))
+                :to-equal '(5000 6000 4000))))
+    (it "when moving the gap backward."
+      (with-temp-srt-buffer
+       (insert (concat "1\n"
+                       "00:00:01,000 --> 00:00:02,000\n"
+                       "Foo.\n\n"
+                       "2\n"
+                       "00:00:03,000 --> 00:00:04,000\n"
+                       "Bar.\n"))
+       (subed-jump-to-subtitle-id 1)
+       (expect (subed-move-gap-after-subtitle -1500 t) :to-be -1500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 500 1500))
+       (expect (subed-move-gap-after-subtitle -600 t) :to-be -500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 0 1000))))
+    )
+  (describe "ignores negative duration if subed-enforce-time-boundaries is falsy"
+    (it "when moving the gap forward."
+      (with-temp-srt-buffer
+       (setq-local subed-enforce-time-boundaries nil)
+       (insert (concat "1\n"
+                       "00:00:01,000 --> 00:00:02,000\n"
+                       "Foo.\n\n"
+                       "2\n"
+                       "00:00:03,000 --> 00:00:04,000\n"
+                       "Bar.\n"))
+       (subed-jump-to-subtitle-id 1)
+       (expect (subed-move-gap-after-subtitle 2000) :to-be 2000)
+       (expect (list (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2)
+                     (subed-subtitle-msecs-stop 2))
+               :to-equal '(4000 5000 4000))
+       (expect (subed-move-gap-after-subtitle 1000) :to-be 1000)
+       (expect (list (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2)
+                     (subed-subtitle-msecs-stop 2))
+               :to-equal '(5000 6000 4000))))
+    (it "when moving the gap backward."
+      (with-temp-srt-buffer
+       (setq-local subed-enforce-time-boundaries nil)
+       (insert (concat "1\n"
+                       "00:00:01,000 --> 00:00:02,000\n"
+                       "Foo.\n\n"
+                       "2\n"
+                       "00:00:03,000 --> 00:00:04,000\n"
+                       "Bar.\n"))
+       (subed-jump-to-subtitle-id 1)
+       (expect (subed-move-gap-after-subtitle -1500) :to-be -1500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 500 1500))
+       (expect (subed-move-gap-after-subtitle -600) :to-be -500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 0 1000))))
+    )
+  (describe "prevents negative time even if subed-enforce-time-boundaries is falsy"
+    (it "when moving the gap forward."
+      (with-temp-srt-buffer
+       (setq-local subed-enforce-time-boundaries nil)
+       (insert (concat "1\n"
+                       "00:00:01,000 --> 00:00:02,000\n"
+                       "Foo.\n\n"
+                       "2\n"
+                       "00:00:03,000 --> 00:00:04,000\n"
+                       "Bar.\n"))
+       (subed-jump-to-subtitle-id 1)
+       (expect (subed-move-gap-after-subtitle -2000) :to-be -2000)
+       (expect (cons (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(0 . 1000))
+       (expect (subed-move-gap-after-subtitle 0) :to-be nil)
+       (expect (cons (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(0 . 1000))
+       (expect (subed-move-gap-after-subtitle -1000) :to-be nil)
+       (expect (cons (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(0 . 1000))))
+    (it "when moving the gap backward."
+      (with-temp-srt-buffer
+       (setq-local subed-enforce-time-boundaries nil)
+       (insert (concat "1\n"
+                       "00:00:01,000 --> 00:00:02,000\n"
+                       "Foo.\n\n"
+                       "2\n"
+                       "00:00:03,000 --> 00:00:04,000\n"
+                       "Bar.\n"))
+       (subed-jump-to-subtitle-id 1)
+       (expect (subed-move-gap-after-subtitle -1500 t) :to-be -1500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 500 1500))
+       (expect (subed-move-gap-after-subtitle -600 t) :to-be -500)
+       (expect (list (subed-subtitle-msecs-start)
+                     (subed-subtitle-msecs-stop)
+                     (subed-subtitle-msecs-start 2))
+               :to-equal '(1000 0 1000))))
+    )
+  )
+
 (describe "Copy start/stop time from player"
   :var (subed-mpv-playback-position)
   (it "does nothing in an empty buffer."

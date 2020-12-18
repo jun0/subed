@@ -49,6 +49,8 @@
     (define-key subed-mode-map (kbd "M-]") #'subed-increase-start-time)
     (define-key subed-mode-map (kbd "M-{") #'subed-decrease-stop-time)
     (define-key subed-mode-map (kbd "M-}") #'subed-increase-stop-time)
+    (define-key subed-mode-map (kbd "M-(") #'subed-move-gap-after-subtitle-backward)
+    (define-key subed-mode-map (kbd "M-)") #'subed-move-gap-after-subtitle-forward)
     (define-key subed-mode-map (kbd "C-M-n") #'subed-move-subtitle-forward)
     (define-key subed-mode-map (kbd "C-M-p") #'subed-move-subtitle-backward)
     (define-key subed-mode-map (kbd "C-M-f") #'subed-shift-subtitle-forward)
