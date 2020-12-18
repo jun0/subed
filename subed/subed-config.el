@@ -228,6 +228,12 @@ The functions are called with the subtitle's start time."
     (run-hook-with-args 'subed-subtitle-time-adjusted-hook
                         (subed-subtitle-msecs-start))))
 
+(defvar-local subed-gap-time-adjusted-hook ()
+  "Functions to call when a subtitle's start or stop time has
+changed by a gap manipulation command.  The functions are called
+with the gap boundaries: the stop time of the preceding subtitle
+and the start time of the succeeding subtitle.")
+
 (defvar-local subed-point-motion-hook nil
   "Functions to call after point changed.")
 
