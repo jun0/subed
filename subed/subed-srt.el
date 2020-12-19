@@ -680,9 +680,8 @@ scheduled call is canceled and another call is scheduled in
             (make-string num-slow-chars ?#)
             (make-string num-fast-chars ?.))))
 
-(defun subed-srt--trans-get-overlay (&optional pos)
-  "Make or get an overlay for the subtitle at POS (or point if
-nil)."
+(defun subed-srt--trans-get-overlay ()
+  "Make or get an overlay for the subtitle at point."
   (cl-block esc
     (let ((start (subed-srt--jump-to-subtitle-time-start))
           (end   (re-search-forward "$" nil t)))
@@ -691,6 +690,7 @@ nil)."
        if (overlay-get ov 'subed-srt) do (cl-return-from esc ov))
       (let ((ov (make-overlay start end nil nil nil)))
         (overlay-put ov 'subed-srt t)
+        (overlay-put ov 'evaporate t)
         (add-to-list 'subed-srt--trans-overlays ov)
         ov))))
 
@@ -699,11 +699,7 @@ nil)."
 (defun subed-srt--trans-regenerate-fences (beg end previous-len)
   "Make sure fences correspond to subtitle lengths.  This
 function is meant to be an item in `after-change-functions' and
-therefore gets PREVIOUS-LEN, which is ignored.  This is a pretty
-heavy-weight hook, especially during intensive editing like in
-`subed-srt--sort'.  Set
-`subed-srt--trans-inhibit-fence-regeneration' to suppress this
-hook during such periods of intense activity."
+therefore gets PREVIOUS-LEN, which is ignored."
   (unless subed-srt--trans-inhibit-fence-regeneration
     (atomic-change-group
       (save-match-data
@@ -739,7 +735,6 @@ hook during such periods of intense activity."
   (subed-srt--validate)
   (subed-srt--trans-regenerate-fences (point-min) (point-max) nil)
   (setq-local font-lock-defaults '(subed-srt-trans-font-lock-keywords))
-  (advice-add 'subed-srt--sort :around 'subed-srt--trans-coalesce-fence-regeneration)
   (add-hook 'after-change-functions 'subed-srt--trans-regenerate-fences t t))
 
 (defun subed-srt--trans-cleanup ()
@@ -748,7 +743,7 @@ hook during such periods of intense activity."
   (mapc #'delete-overlay subed-srt--trans-overlays)
   (setq subed-srt--trans-overlays nil)
   (remove-hook 'after-change-functions 'subed-srt--trans-regenerate-fences)
-  (advice-remove 'subed-srt--sort 'subed-srt--trans-coalesce-fence-regeneration))
+  )
 
 (provide 'subed-srt)
 ;;; subed-srt.el ends here
