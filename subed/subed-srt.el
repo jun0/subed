@@ -709,20 +709,20 @@ hook during such periods of intense activity."
       (save-match-data
         (save-excursion
           (goto-char beg)
-          (cl-do ((pos (subed-srt--jump-to-subtitle-time-start)
-                       (subed-srt--forward-subtitle-time-start))
-                  (start-time (subed-srt--subtitle-msecs-start)
-                              (subed-srt--subtitle-msecs-start))
-                  (stop-time (subed-srt--subtitle-msecs-stop)
-                             (subed-srt--subtitle-msecs-stop)))
-              ((or (not pos) (> pos end)))
-            (when (and start-time stop-time) ; make sure subtitle headers parse
-              (let ((duration (- stop-time start-time))
+          (cl-loop
+           for pos = (subed-srt--jump-to-subtitle-time-start)
+                then (subed-srt--forward-subtitle-time-start)
+           until (or (not pos) (> pos end))
+           for start-time = (subed-srt--subtitle-msecs-start)
+           for stop-time  = (subed-srt--subtitle-msecs-stop)
+           when (and start-time stop-time) ; make sure subtitle headers parse
+           do
+           (let ((duration (- stop-time start-time))
                     (ov (subed-srt--trans-get-overlay)))
                 (unless (equal duration (overlay-get ov 'duration))
                   (overlay-put ov 'duration duration)
                   (overlay-put ov 'after-string
-                               (subed-srt--trans-format-fence duration)))))))))))
+                               (subed-srt--trans-format-fence duration))))))))))
 
 (defun subed-srt--trans-coalesce-fence-regeneration (orig-fun &rest args)
   (mapc #'delete-overlay subed-srt--trans-overlays)
