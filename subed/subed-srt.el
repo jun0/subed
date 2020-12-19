@@ -724,26 +724,31 @@ hook during such periods of intense activity."
                   (overlay-put ov 'after-string
                                (subed-srt--trans-format-fence duration)))))))))))
 
-(defun subed-srt--trans-inhibit-fence-regeneration-around (orig-fun &rest args)
-  (let ((subed-srt--trans-inhibit-fence-regeneration t))
-    (funcall orig-fun args)))
+(defun subed-srt--trans-coalesce-fence-regeneration (orig-fun &rest args)
+  (mapc #'delete-overlay subed-srt--trans-overlays)
+  (setq subed-srt--trans-overlays nil)
+  (unwind-protect
+      (let ((subed-srt--trans-inhibit-fence-regeneration t))
+        (apply orig-fun args))
+    (save-restriction
+      (widen)
+      (subed-srt--trans-regenerate-fences (point-min) (point-max) 0))))
 
 (defun subed-srt--trans-init ()
   "This function is called when subed-trans-mode is enabled for an SRT file."
   (subed-srt--validate)
   (subed-srt--trans-regenerate-fences (point-min) (point-max) nil)
   (setq-local font-lock-defaults '(subed-srt-trans-font-lock-keywords))
-  (advice-add 'subed-srt--sort :around 'subed-srt--trans-inhibit-fence-regeneration-around)
+  (advice-add 'subed-srt--sort :around 'subed-srt--trans-coalesce-fence-regeneration)
   (add-hook 'after-change-functions 'subed-srt--trans-regenerate-fences t t))
 
 (defun subed-srt--trans-cleanup ()
   "This function is called when subed-trans-mode is disabled for an SRT file."
   (setq-local font-lock-defaults '(subed-srt-font-lock-keywords))
-  (cl-loop for ov in subed-srt--trans-overlays
-           do (delete-overlay ov))
+  (mapc #'delete-overlay subed-srt--trans-overlays)
   (setq subed-srt--trans-overlays nil)
   (remove-hook 'after-change-functions 'subed-srt--trans-regenerate-fences)
-  (advice-remove 'subed-srt--sort 'subed-srt--trans-inhibit-fence-regeneration-around))
+  (advice-remove 'subed-srt--sort 'subed-srt--trans-coalesce-fence-regeneration))
 
 (provide 'subed-srt)
 ;;; subed-srt.el ends here
