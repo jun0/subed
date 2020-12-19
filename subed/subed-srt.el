@@ -676,20 +676,20 @@ scheduled call is canceled and another call is scheduled in
          (num-fast-chars (max 0 (- (floor (* subed-trans-fast-speed
                                              (/ duration 1000.0)))
                                    num-slow-chars))))
-    (concat (make-string num-slow-chars ?#)
-            (make-string num-fast-chars ?.)
-            "\n")))
+    (concat "\n"
+            (make-string num-slow-chars ?#)
+            (make-string num-fast-chars ?.))))
 
 (defun subed-srt--trans-get-overlay (&optional pos)
   "Make or get an overlay for the subtitle at POS (or point if
 nil)."
   (cl-block esc
     (let ((start (subed-srt--jump-to-subtitle-time-start))
-          (end   (subed-srt--jump-to-subtitle-text)))
+          (end   (re-search-forward "$" nil t)))
       (cl-loop
        for ov being overlays from start to end
        if (overlay-get ov 'subed-srt) do (cl-return-from esc ov))
-      (let ((ov (make-overlay start end nil nil t)))
+      (let ((ov (make-overlay start end nil nil nil)))
         (overlay-put ov 'subed-srt t)
         (add-to-list 'subed-srt--trans-overlays ov)
         ov))))
